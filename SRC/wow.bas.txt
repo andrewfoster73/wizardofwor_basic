@@ -1,0 +1,37 @@
+#autoline 10
+
+RUN AT 3
+LAYER 2,1: CLS
+PAPER 0
+
+PROC loadAssets()
+
+PROC loadDungeon(1)
+PROC drawPlayer(1)
+
+PAUSE 0
+
+DEFPROC loadAssets()
+    LAYER 2,1: CLS
+    BORDER 0
+
+    LOAD "./ASSETS/DUNGEONS/dungeon.spr" BANK 15
+    LOAD "./ASSETS/actors.spr" BANK 17
+    LOAD "./ASSETS/DUNGEONS/dungeon1.map" BANK 16
+
+    TILE BANK 15
+
+    SPRITE BANK 17
+    SPRITE PRINT 1
+ENDPROC
+
+DEFPROC loadDungeon(%n)
+    REM TODO: Dungeon offset
+    TILE DIM 16,0,13,16
+    TILE 13,8 TO 2,0
+ENDPROC
+
+DEFPROC drawPlayer(%n)
+    REM TODO: Player offset
+    SPRITE 1, 80, 144, 1, BIN 00001001
+ENDPROC
