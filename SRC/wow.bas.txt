@@ -3,13 +3,17 @@
 RUN AT 3
 LAYER 2,1: CLS
 PAPER 0
-
+INK 7
+ 
 PROC loadAssets()
+PROC initGame()
 
 PROC loadDungeon(1)
 PROC drawPlayer(1)
+PROC drawPlayer(2)
+PROC mainLoop()
 
-PAUSE 0
+STOP
 
 DEFPROC loadAssets()
     LAYER 2,1: CLS
@@ -25,13 +29,55 @@ DEFPROC loadAssets()
     SPRITE PRINT 1
 ENDPROC
 
-DEFPROC loadDungeon(%n)
+DEFPROC initGame()
+    REM Player: x, y, direction, firing, lives
+    DIM p(2,5) 
+    LET %p[1][1]=80
+    LET %p[1][2]=144
+    LET %p[1][3]=0
+    LET %p[1][4]=0
+    LET %p[1][5]=3
+    LET %p[2][1]=240
+    LET %p[2][2]=144
+    LET %p[2][3]=4
+    LET %p[2][4]=0
+    LET %p[2][5]=3
+ENDPROC
+
+DEFPROC mainLoop()
+    REPEAT
+        PROC readJoystick(0) TO %d
+        PRINT AT 10,10;%d
+        PROC drawPlayer(1)
+    REPEAT UNTIL 0
+ENDPROC
+
+DEFPROC loadDungeon(%d)
     REM TODO: Dungeon offset
     TILE DIM 16,0,13,16
     TILE 13,8 TO 2,0
 ENDPROC
 
 DEFPROC drawPlayer(%n)
-    REM TODO: Player offset
-    SPRITE 1, 80, 144, 1, BIN 00001001
+    REM 00000001 RIGHT   (0)(1)
+    REM 00000011 DOWN    (1)(4)
+    REM 00000111 UP      (3)(8)
+    REM 00001001 LEFT    (4)(2)
+    LOCAL %f
+    LET %f=%p[n][3] << 1
+    SPRITE %n, %p[n][1], %p[n][2], %n * 2 - 2, %f | BIN 00000001
 ENDPROC
+
+DEFPROC readJoystick(%n)
+    LOCAL %j
+    LOCAL %d
+    IF %p=0 THEN LET %j= IN 31
+    IF %p=1 THEN LET %j= IN 55
+    PRINT AT 10,15;%j
+    LET %d= %p[n + 1][3]
+    IF %j=1 THEN LET %d=0
+    IF %j=2 THEN LET %d=4
+    IF %j=4 THEN LET %d=1
+    IF %j=8 THEN LET %d=3
+    LET %p[n + 1][3] = %d
+ENDPROC =%d
