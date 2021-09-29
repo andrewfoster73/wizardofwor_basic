@@ -3,12 +3,13 @@
 RUN AT 3
 LAYER 2,1: CLS
 PAPER 0
-INK 7
+INK 224
  
 PROC loadAssets()
 PROC initGame()
 
 PROC loadDungeon(1)
+PROC drawGrid()
 PROC drawPlayer(1)
 PROC drawPlayer(2)
 PROC mainLoop()
@@ -17,7 +18,7 @@ STOP
 
 DEFPROC loadAssets()
     LAYER 2,1: CLS
-    BORDER 0
+    BORDER 2
 
     LOAD "./ASSETS/DUNGEONS/dungeon.spr" BANK 15
     LOAD "./ASSETS/actors.spr" BANK 17
@@ -30,37 +31,30 @@ DEFPROC loadAssets()
 ENDPROC
 
 DEFPROC initGame()
-    REM Player: x, y, direction, speed, frame, firing, bullet, lives, score, dying, waiting countdown
-    REM TODO read this in using DATA?
-    DIM p(2,7) 
-    LET %p[1][1]=80
-    LET %p[1][2]=144
-    LET %p[1][3]=0
-    LET %p[1][4]=0
-    LET %p[1][5]=0
-    LET %p[1][6]=0
-    LET %p[1][7]=3
-    LET %p[2][1]=240
-    LET %p[2][2]=144
-    LET %p[2][3]=4
-    LET %p[2][4]=0
-    LET %p[2][5]=0
-    LET %p[2][7]=0
-    LET %p[2][7]=3
+    REM %p Player: x, y, direction, speed, frame, firing, bullet, lives, score, dying, waiting countdown
+    DIM p(2,7)
+    FOR %n=1 TO 7: READ %p[1][n]: NEXT %n
+    DATA 80,144,0,0,0,0,3
+    FOR %n=1 TO 7: READ %p[2][n]: NEXT %n
+    DATA 240,144,4,0,0,0,3
     REM TODO add dimensions for 6 regular baddies plus worluk and wizard of wor
-    REM TODO - x, y, direction, speed, frame, firing, [burwor|garwor|thorwor]
-    REM TODO door data
-    REM TODO - open|closed
-    REM TODO game data
-    REM TODO - [menu|playing_ssd|playing_dsd|splash|splash_extra_man|worluk|wizard], numPlayers
+    REM TODO %b Baddies: x, y, direction, speed, frame, firing, state [burwor|garwor|thorwor], dying, visible
+    REM TODO %d Doors: countdown, left_door_x, left_door_spr_flags, right_door_x, right_door_spr_flags
+    DIM d(5)
+    FOR %n=1 TO 5: READ %d(n): NEXT %n
+    DATA 256,66,1,254,9
+    REM TODO %g Game: state [menu|playing_ssd|playing_dsd|splash|splash_extra_man|worluk|wizard], numPlayers, dungeon_number
 ENDPROC
 
 DEFPROC mainLoop()
     REPEAT
+        PROC drawDoors()
         PROC readJoystick(1)
-        PRINT AT 0,15;%p[1][3];%p[1][4]
         PROC movePlayer(1)
         PROC drawPlayer(1)
+        REM Countdown until door opens
+        LET %d(1)=%d(1)-1
+        IF %d(1)=0 THEN LET %d(1)=256
     REPEAT UNTIL 0
 ENDPROC
 
@@ -68,6 +62,14 @@ DEFPROC loadDungeon(%d)
     REM TODO: Dungeon offset
     TILE DIM 16,0,13,16
     TILE 13,8 TO 2,0
+ENDPROC
+
+DEFPROC drawGrid()
+    FOR %x=0 TO 256 STEP 16
+        FOR %y=0 TO 192 STEP 16
+            INK 3: PLOT %x,%y
+        NEXT %y
+    NEXT %x
 ENDPROC
 
 DEFPROC movePlayer(%n)
@@ -78,31 +80,71 @@ DEFPROC movePlayer(%n)
     IF %p[n][3]=4 THEN PROC moveLeft(%n)
     REM Change animation frame 0->1->2->0
     LET %p[n][5]=%p[n][5]+1
-    IF %p[n][5] = 3 THEN LET %p[n][5]=0
+    IF %p[n][5]=3 THEN LET %p[n][5]=0
 ENDPROC
 
 DEFPROC moveUp(%n)
+    REM Top of screen
+    IF %p[n][2]=33 THEN ENDPROC
     LOCAL %y
+    REM Move y up 1 pixel
     LET %y=%p[n][2]-1
-    REM Check for walls
-    LET %p[n][2] = %y
+    REM How close to a grid axis are we?
+    LET %x=%p[n][1] MOD 16
+    IF %x < 3 THEN %p[n][1]=%p[n][1]-x
+    IF %x > 13 THEN %p[n][1]=%p[n][1]+(15-x)
+    REM IF %x > 2 AND x < 14 THEN ENDPROC
+    REM Check for walls: 7 = palette index for blue wall
+    IF %p[n][2] MOD 16=0 THEN POINT %p[n][1]-31,%y-32 TO %c: IF %c=7 THEN ENDPROC
+    REM TODO Check for collision with baddies or bullets
+    REM Otherwise set new Y position
+    LET %p[n][2]=%y
 ENDPROC
 
 DEFPROC moveDown(%n)
+    REM Bottom of screen
+    IF %p[n][2]>=129 THEN ENDPROC
     LOCAL %y
     LET %y=%p[n][2]+1
-    LET %p[n][2] = %y
+    LOCAL %x
+    LET %x=%p[n][1] MOD 16
+    IF %x < 3 THEN %p[n][1]=%p[n][1]-x
+    IF %x > 13 THEN %p[n][1]=%p[n][1]+(15-x)
+    REM IF %x > 2 AND x < 14 THEN ENDPROC
+    REM Check for walls: 7 = palette index for blue wall
+    IF %p[n][2] MOD 16=0 THEN POINT %p[n][1]-31,%y-17 TO %c: IF %c=7 THEN ENDPROC
+    REM TODO Check for collision with baddies or bullets
+    REM Otherwise set new Y position
+    LET %p[n][2]=%y
 ENDPROC
 
 DEFPROC moveRight(%n)
     LOCAL %x
     LET %x=%p[n][1]+1
+    LET %y=%p[n][2] MOD 16
+    IF %y < 3 THEN %p[n][2]=%p[n][2]-y
+    IF %y > 13 THEN %p[n][2]=%p[n][2]+(15-y)
+    REM IF %y > 2 AND x < 14 THEN ENDPROC
+    REM Check for walls: 7 = palette index for blue wall
+    IF %p[n][1] MOD 16=0 THEN POINT %x-17,%p[n][2]-31 TO %c: IF %c=7 THEN ENDPROC
+    REM TODO Check for collision with baddies or bullets
+    REM Otherwise set new Y position
     LET %p[n][1]=%x
 ENDPROC
 
 DEFPROC moveLeft(%n)
+    IF %p[n][1]=80 AND p[n][2] <> 80 THEN ENDPROC
+    REM Are we next to the door and it is open?
+REM     IF %p[n][1]=80 AND p[n][2] = 80 AND %g[]
     LOCAL %x
     LET %x=%p[n][1]-1
+    IF %y < 3 THEN %p[n][2]=%p[n][2]-y
+    IF %y > 13 THEN %p[n][2]=%p[n][2]+(15-y)
+    REM IF %y > 2 AND x < 14 THEN ENDPROC
+    REM Check for walls: 7 = palette index for blue wall
+    IF %p[n][1] MOD 16=0 THEN POINT %x-32,%p[n][2]-31 TO %c: IF %c=7 THEN ENDPROC
+    REM TODO Check for collision with baddies or bullets
+    REM Otherwise set new Y position
     LET %p[n][1]=%x
 ENDPROC
 
@@ -110,7 +152,20 @@ DEFPROC traverseDoor(%n)
     REM TODO teleport left or right door
 ENDPROC
 
+DEFPROC drawDoors()
+    LOCAL %a
+    FOR %n=1 TO 2
+        REM Countdown greater than 48 and door still closed
+        IF %d(1) > 128 THEN LET %a=11: ELSE LET %a=10
+        SPRITE %n+20,%d(n*2),80,%a,%d(n*2+1)
+    NEXT %n
+ENDPROC
+
 DEFPROC drawPlayer(%n)
+    POINT %p[n][1]-32,%p[n][2]-32 TO %c
+    PRINT AT 21,0;"X:";%p[n][1];",Y:";%p[n][2];", C:";%c;" M:";%p[n][2] MOD 16;"     "
+    PRINT AT 22,0;"D:";%d(1)
+
     REM 00000001 RIGHT   (0)(1)
     REM 00000011 DOWN    (1)(4)
     REM 00000111 UP      (3)(8)
@@ -120,8 +175,11 @@ DEFPROC drawPlayer(%n)
     REM flags
     LET %f=%p[n][3] << 1
     REM animation pattern
-    LET %a=%p[n][5] + ((n - 1) * 4)
-    SPRITE %n, %p[n][1], %p[n][2], %a, %f | BIN 00000001
+    LET %a=%p[n][5]+((n-1)*4)
+    REM Firing
+    IF %p[n][6]=1 THEN LET %a=%n-1*4+3
+    REM Dying
+    SPRITE %n,%p[n][1],%p[n][2],%a,%f| BIN 00000001
 ENDPROC
 
 DEFPROC readJoystick(%n)
@@ -131,7 +189,6 @@ DEFPROC readJoystick(%n)
     IF %n=1 THEN LET %j= IN 31
     REM Read Joystick port 2
     IF %n=2 THEN LET %j= IN 55
-    PRINT AT 10,20;%j
     REM Maintain current direction
     LET %d=%p[n][3]
     REM Right
@@ -142,12 +199,12 @@ DEFPROC readJoystick(%n)
     IF %j=4 THEN LET %d=1
     REM Up
     IF %j=8 THEN LET %d=3
-    Rem Firing
-    IF %j& BIN 00010000 =16 THEN LET %p[n][6]=1
+    REM Firing
+    IF %j& BIN 00010000 =16 THEN LET %p[n][6]=1: ELSE LET %p[n][6]=0
     REM Update player speed to 0 (stopped)
     LET %p[n][4]=0
     REM Update player speed to 1 if any direction pressed
     IF %j& BIN 00001111 > 0 THEN LET %p[n][4]=1
     REM Update player direction
-    LET %p[n][3] = %d 
+    LET %p[n][3]=%d
 ENDPROC
