@@ -9,59 +9,42 @@ PROC loadAssets()
 PROC initGame()
 
 PROC loadDungeon(1)
-PROC drawGrid()
-PROC drawPlayer(1)
-PROC drawPlayer(2)
+REM PROC drawGrid()
+REM PROC drawPlayer(1)
+REM PROC drawPlayer(2)
 PROC mainLoop()
 
 STOP
 
-DEFPROC loadAssets()
-    LAYER 2,1: CLS
-    BORDER 2
-
-    LOAD "./ASSETS/DUNGEONS/dungeon.spr" BANK 15
-    LOAD "./ASSETS/actors.spr" BANK 17
-    LOAD "./ASSETS/DUNGEONS/dungeon1.map" BANK 16
-
-    TILE BANK 15
-
-    SPRITE BANK 17
-    SPRITE PRINT 1
-ENDPROC
-
-DEFPROC initGame()
-    REM %p Player: x, y, direction, speed, frame, firing, bullet, lives, score, dying, waiting countdown
-    DIM p(2,7)
-    FOR %n=1 TO 7: READ %p[1][n]: NEXT %n
-    DATA 80,144,0,0,0,0,3
-    FOR %n=1 TO 7: READ %p[2][n]: NEXT %n
-    DATA 240,144,4,0,0,0,3
-    REM TODO add dimensions for 6 regular baddies plus worluk and wizard of wor
-    REM TODO %b Baddies: x, y, direction, speed, frame, firing, state [burwor|garwor|thorwor], dying, visible
-    REM TODO %d Doors: countdown, left_door_x, left_door_spr_flags, right_door_x, right_door_spr_flags
-    DIM d(5)
-    FOR %n=1 TO 5: READ %d(n): NEXT %n
-    DATA 256,66,1,254,9
-    REM TODO %g Game: state [menu|playing_ssd|playing_dsd|splash|splash_extra_man|worluk|wizard], numPlayers, dungeon_number
-ENDPROC
-
 DEFPROC mainLoop()
+    LET %r=0: REM frames
+    LET %s=0: REM fps
     REPEAT
+        LET %r=%r+1
+        LET %t=(65536* PEEK 23674+256* PEEK 23673+ PEEK 23672)/50
         PROC drawDoors()
-        PROC readJoystick(1)
-        PROC movePlayer(1)
-        PROC drawPlayer(1)
-        REM Countdown until door opens
-        LET %d(1)=%d(1)-1
-        IF %d(1)=0 THEN LET %d(1)=256
-    REPEAT UNTIL 0
-ENDPROC
+        FOR %n=1 TO %w(2)
+            PROC readJoystick(%n)
+            PROC movePlayer(%n)
+            PROC playerFire(%n)
+            PROC drawPlayer(%n)
+        NEXT %n
+        FOR %n = 1 to 6
+            REM moveBaddies()
+            PROC drawBaddies(%n)
+        NEXT %n
 
-DEFPROC loadDungeon(%d)
-    REM TODO: Dungeon offset
-    TILE DIM 16,0,13,16
-    TILE 13,8 TO 2,0
+        REM Countdown until door opens
+        LET %t(1)=%t(1)-1
+        IF %t(1)=0 THEN LET %t(1)=1024
+
+        SPRITE MOVE INT
+
+        REM Calculate FPS
+        LET %s=%r/t
+        IF %r > 65536 THEN r=0:t=0
+        PRINT AT 22,18;"FPS:";%s
+    REPEAT UNTIL 0
 ENDPROC
 
 DEFPROC drawGrid()
@@ -70,6 +53,9 @@ DEFPROC drawGrid()
             INK 3: PLOT %x,%y
         NEXT %y
     NEXT %x
+ENDPROC
+
+DEFPROC moveBaddies(%n)
 ENDPROC
 
 DEFPROC movePlayer(%n)
@@ -83,128 +69,231 @@ DEFPROC movePlayer(%n)
     IF %p[n][5]=3 THEN LET %p[n][5]=0
 ENDPROC
 
+DEFPROC playerFire(%n)
+    IF %p[n][6] <> 1 THEN ENDPROC
+    IF %p[n][7]=1 THEN ENDPROC
+    %p[n][7]=1
+    %p[n][6]=0
+    IF %p[n][7]=1 THEN SPRITE 25,%p[n][1],%p[n][2],8,1: SPRITE CONTINUE 25,%p[n][1] TO 256 STEP 8 RUN ,%p[n][2] STOP ,8, BIN 00000011
+ENDPROC
+
 DEFPROC moveUp(%n)
-    REM Top of screen
-    IF %p[n][2]=33 THEN ENDPROC
+    REM TODO Handle leaving start box
+
+    IF %p[n][2] <= 33 THEN ENDPROC : REM Top of screen
+
     LOCAL %y
-    REM Move y up 1 pixel
-    LET %y=%p[n][2]-1
-    REM How close to a grid axis are we?
-    LET %x=%p[n][1] MOD 16
-    IF %x < 3 THEN %p[n][1]=%p[n][1]-x
-    IF %x > 13 THEN %p[n][1]=%p[n][1]+(15-x)
-    REM IF %x > 2 AND x < 14 THEN ENDPROC
+    LET %y=%p[n][2]-2: REM Move y up 2 pixels
+
+    LOCAL %x
+    LET %x=%p[n][1] MOD 16: REM How close to a grid axis are we?
+
+    REM Shuffle the player over so they shimmy through the gap
+    IF %x < 3 THEN %p[n][1]=%p[n][1]-x: ELSE IF %x > 13 THEN %p[n][1]=%p[n][1]+(16-x): ELSE ENDPROC
+
     REM Check for walls: 7 = palette index for blue wall
-    IF %p[n][2] MOD 16=0 THEN POINT %p[n][1]-31,%y-32 TO %c: IF %c=7 THEN ENDPROC
+    IF %p[n][2] MOD 16=0 THEN POINT %p[n][1]-31,%y-30 TO %c: IF %c=7 THEN ENDPROC
+
     REM TODO Check for collision with baddies or bullets
+    IF % SPRITE OVER (n,10 TO 25) > 0 THEN PROC playerDying(%n)
+
     REM Otherwise set new Y position
     LET %p[n][2]=%y
 ENDPROC
 
 DEFPROC moveDown(%n)
-    REM Bottom of screen
-    IF %p[n][2]>=129 THEN ENDPROC
+    IF %p[n][2] >= 129 THEN ENDPROC : REM Bottom of screen
+
     LOCAL %y
-    LET %y=%p[n][2]+1
+    LET %y=%p[n][2]+2: REM Move y down 2 pixels
+
     LOCAL %x
-    LET %x=%p[n][1] MOD 16
-    IF %x < 3 THEN %p[n][1]=%p[n][1]-x
-    IF %x > 13 THEN %p[n][1]=%p[n][1]+(15-x)
-    REM IF %x > 2 AND x < 14 THEN ENDPROC
+    LET %x=%p[n][1] MOD 16: REM How close to a grid axis are we?
+
+    REM Shuffle the player over so they shimmy through the gap
+    IF %x < 3 THEN %p[n][1]=%p[n][1]-x: ELSE IF %x > 13 THEN %p[n][1]=%p[n][1]+(16-x): ELSE ENDPROC
+
     REM Check for walls: 7 = palette index for blue wall
-    IF %p[n][2] MOD 16=0 THEN POINT %p[n][1]-31,%y-17 TO %c: IF %c=7 THEN ENDPROC
+    IF %p[n][2] MOD 16=0 THEN POINT %p[n][1]-31,%y-18 TO %c: IF %c=7 THEN ENDPROC
+
     REM TODO Check for collision with baddies or bullets
     REM Otherwise set new Y position
     LET %p[n][2]=%y
 ENDPROC
 
 DEFPROC moveRight(%n)
+    REM Are we next to the door and it is open?
+
+    REM IF %p[n][1] >= 239 THEN ENDPROC : REM Right of screen
+
     LOCAL %x
-    LET %x=%p[n][1]+1
-    LET %y=%p[n][2] MOD 16
-    IF %y < 3 THEN %p[n][2]=%p[n][2]-y
-    IF %y > 13 THEN %p[n][2]=%p[n][2]+(15-y)
-    REM IF %y > 2 AND x < 14 THEN ENDPROC
+    LET %x=%p[n][1]+2: REM Move right 2 pixels
+
+    LET %y=%p[n][2] MOD 16:: REM How close to a grid axis are we?
+
+    REM Shuffle the player over so they shimmy through the gap
+    IF %y < 3 THEN %p[n][2]=%p[n][2]-y: ELSE IF %y > 13 THEN %p[n][2]=%p[n][2]+(16-y): ELSE ENDPROC
+
     REM Check for walls: 7 = palette index for blue wall
-    IF %p[n][1] MOD 16=0 THEN POINT %x-17,%p[n][2]-31 TO %c: IF %c=7 THEN ENDPROC
+    IF %p[n][1] MOD 16=0 THEN POINT %x-18,%p[n][2]-31 TO %c: IF %c=7 THEN ENDPROC
+
     REM TODO Check for collision with baddies or bullets
     REM Otherwise set new Y position
     LET %p[n][1]=%x
 ENDPROC
 
 DEFPROC moveLeft(%n)
-    IF %p[n][1]=80 AND p[n][2] <> 80 THEN ENDPROC
     REM Are we next to the door and it is open?
+
+    REM IF %p[n][1]=80 THEN IF %p[n][2] <> 80 THEN ENDPROC
+
 REM     IF %p[n][1]=80 AND p[n][2] = 80 AND %g[]
     LOCAL %x
-    LET %x=%p[n][1]-1
-    IF %y < 3 THEN %p[n][2]=%p[n][2]-y
-    IF %y > 13 THEN %p[n][2]=%p[n][2]+(15-y)
-    REM IF %y > 2 AND x < 14 THEN ENDPROC
+    LET %x=%p[n][1]-2: REM Move left 2 pixels
+
+    LET %y=%p[n][2] MOD 16: REM How close to a grid axis are we?
+
+    REM Shuffle the player over so they shimmy through the gap
+    IF %y < 3 THEN %p[n][2]=%p[n][2]-y: ELSE IF %y > 13 THEN %p[n][2]=%p[n][2]+(16-y): ELSE ENDPROC
+
     REM Check for walls: 7 = palette index for blue wall
-    IF %p[n][1] MOD 16=0 THEN POINT %x-32,%p[n][2]-31 TO %c: IF %c=7 THEN ENDPROC
+    IF %p[n][1] MOD 16=0 THEN POINT %x-30,%p[n][2]-31 TO %c: IF %c=7 THEN ENDPROC
+
     REM TODO Check for collision with baddies or bullets
+    IF % SPRITE OVER (n,10 TO 25) > 0 THEN PROC playerDying(%n)
+
     REM Otherwise set new Y position
     LET %p[n][1]=%x
+ENDPROC
+
+DEFPROC drawDoors()
+    LOCAL %a
+    FOR %n=1 TO 2
+        REM Countdown greater than 128 and door still closed
+        IF %t(1) > 128 THEN LET %a=11: ELSE LET %a=10
+        SPRITE %n+30,%t(n*2),80,%a,%t(n*2+1)
+    NEXT %n
+ENDPROC
+
+DEFPROC drawPlayer(%n)
+    PRINT AT %n+21,0;"X:";%p[n][1];",Y:";%p[n][2];"D:";%p[n][10];"     "
+
+    REM 00000001 RIGHT   (0)(1)
+    REM 00000011 DOWN    (1)(4)
+    REM 00000111 UP      (3)(8)
+    REM 00001001 LEFT    (4)(2)
+
+    LOCAL %f
+    LOCAL %a
+    
+    LET %f=%p[n][3] << 1| BIN 00000001: REM flags
+    
+    LET %a=%p[n][5]+((n-1)*4): REM animation pattern
+    
+    IF %p[n][6]=1 THEN LET %a=%n-1*4+3: REM firing
+    
+    IF %p[n][10] > 0 THEN LET %a=%p[n][10] MOD 8 + 32: LET %p[n][10] = %p[n][10] - 1: REM dying
+
+    SPRITE %n,%p[n][1],%p[n][2],%a,%f
+    REM Bullet
+    REM Lives
+REM     FOR %x = 1 to 5
+REM     SPRITE %n*2 + x,80-(%x*16),128,%n-1,1
+REM     NEXT %x
+ENDPROC
+
+DEFPROC drawBaddies(%n)
+    LOCAL %f
+    LET %f=%b[n][3] << 1| BIN 00000001: REM flags
+
+    LOCAL %a
+    REM eg 0 + ((1 - 1) * 4 + 12)
+    LET %a=%b[n][5]+((b[n][7]-1)*4+12): REM animation pattern
+
+    SPRITE %n + 10,%b[n][1],%b[n][2],%a,%f
+ENDPROC
+
+DEFPROC readJoystick(%n)
+    LOCAL %j
+    LOCAL %d
+
+    IF %n=1 THEN LET %j= IN 31: REM Read Joystick port 1
+    IF %n=2 THEN LET %j= IN 55: REM Read Joystick port 2
+
+    IF %j=0 THEN ENDPROC
+
+    LET %d=%p[n][3]: REM Maintain current direction    
+    IF %j=1 THEN LET %d=0: REM Right
+    IF %j=2 THEN LET %d=4: REM Left
+    IF %j=4 THEN LET %d=1: REM Down
+    IF %j=8 THEN LET %d=3: REM Up
+    IF %j& BIN 00010000 =16 THEN LET %p[n][6]=1: ELSE LET %p[n][6]=0: REM Firing
+    LET %p[n][4]=0: REM Update player speed to 0 (stopped)
+    IF %j& BIN 00001111 > 0 THEN LET %p[n][4]=1: REM Update player speed to 1 if any direction pressed
+    LET %p[n][3]=%d: REM Update player direction
+ENDPROC
+
+DEFPROC loadDungeon(%d)
+    REM TODO: Dungeon offset
+    TILE DIM 16,0,13,16
+    TILE 13,8 TO 2,0
+    REM TODO: Reset baddies
+    FOR %n=1 TO 6
+        %b[n][1]=% RND (12)*16 + 80: REM x
+        %b[n][2]=% RND (7)*16 + 32: REM y
+        %b[n][3]=0: REM direction
+        %b[n][4]=1: REM speed
+        %b[n][5]=0: REM frame
+        %b[n][6]=0: REM firing
+        %b[n][7]=1: REM state (burwor)
+    NEXT %n
 ENDPROC
 
 DEFPROC traverseDoor(%n)
     REM TODO teleport left or right door
 ENDPROC
 
-DEFPROC drawDoors()
-    LOCAL %a
-    FOR %n=1 TO 2
-        REM Countdown greater than 48 and door still closed
-        IF %d(1) > 128 THEN LET %a=11: ELSE LET %a=10
-        SPRITE %n+20,%d(n*2),80,%a,%d(n*2+1)
-    NEXT %n
+DEFPROC playerDying(%n)
+    REM lose a life
+    REM initiate dying animation
+    LET %p[n][10] = 32
 ENDPROC
 
-DEFPROC drawPlayer(%n)
-    POINT %p[n][1]-32,%p[n][2]-32 TO %c
-    PRINT AT 21,0;"X:";%p[n][1];",Y:";%p[n][2];", C:";%c;" M:";%p[n][2] MOD 16;"     "
-    PRINT AT 22,0;"D:";%d(1)
+DEFPROC loadAssets()
+    LAYER 2,1: CLS
+    BORDER 0
 
-    REM 00000001 RIGHT   (0)(1)
-    REM 00000011 DOWN    (1)(4)
-    REM 00000111 UP      (3)(8)
-    REM 00001001 LEFT    (4)(2)
-    LOCAL %f
-    LOCAL %a
-    REM flags
-    LET %f=%p[n][3] << 1
-    REM animation pattern
-    LET %a=%p[n][5]+((n-1)*4)
-    REM Firing
-    IF %p[n][6]=1 THEN LET %a=%n-1*4+3
-    REM Dying
-    SPRITE %n,%p[n][1],%p[n][2],%a,%f| BIN 00000001
+    LOAD "./ASSETS/DUNGEONS/dungeon.spr" BANK 15
+    LOAD "./ASSETS/actors.spr" BANK 17
+    LOAD "./ASSETS/DUNGEONS/dungeon1.map" BANK 16
+    LOAD "pt3player" BANK 20
+    LOAD "tune.pt3" BANK 20,2158,2530
+
+    TILE BANK 15
+
+    SPRITE BANK 17
+    SPRITE PRINT 1
 ENDPROC
 
-DEFPROC readJoystick(%n)
-    LOCAL %j
-    LOCAL %d
-    REM Read Joystick port 1
-    IF %n=1 THEN LET %j= IN 31
-    REM Read Joystick port 2
-    IF %n=2 THEN LET %j= IN 55
-    REM Maintain current direction
-    LET %d=%p[n][3]
-    REM Right
-    IF %j=1 THEN LET %d=0
-    REM Left
-    IF %j=2 THEN LET %d=4
-    REM Down
-    IF %j=4 THEN LET %d=1
-    REM Up
-    IF %j=8 THEN LET %d=3
-    REM Firing
-    IF %j& BIN 00010000 =16 THEN LET %p[n][6]=1: ELSE LET %p[n][6]=0
-    REM Update player speed to 0 (stopped)
-    LET %p[n][4]=0
-    REM Update player speed to 1 if any direction pressed
-    IF %j& BIN 00001111 > 0 THEN LET %p[n][4]=1
-    REM Update player direction
-    LET %p[n][3]=%d
+DEFPROC initGame()
+    REM %p Player: x, y, direction, speed, frame, firing, bullet, lives, score, dying, waiting countdown
+    DIM p(2,11)
+    FOR %n=1 TO 11: READ %p[1][n]: NEXT %n
+    DATA 80,144,0,0,0,0,0,3,0,0,10
+    FOR %n=1 TO 11: READ %p[2][n]: NEXT %n
+    DATA 240,144,4,0,0,0,0,3,0,0,10
+    REM TODO add dimensions for 6 regular baddies plus worluk and wizard of wor
+    REM TODO %b Baddies: x, y, direction, speed, frame, firing, state [dead|burwor|garwor|thorwor], dying, visible
+    DIM b(8,9)
+
+    REM TODO %t Doors: countdown, left_door_x, left_door_spr_flags, right_door_x, right_door_spr_flags
+    FOR %n=1 TO 5: READ %t(n): NEXT %n
+    DATA 1024,66,1,254,9
+    REM TODO %w Game: state [menu|playing_ssd|playing_dsd|splash|splash_extra_man|worluk|wizard], numPlayers, dungeon_number
+    FOR %n=1 TO 3: READ %w(n): NEXT %n
+    DATA 0,1,1
+    REM TODO %r Radar: [0 burwor | 1 garwor | 2 thorwor]
+    DIM r(13,8)
+    SPRITE STOP
+    REM .install pt3player.drv
 ENDPROC
